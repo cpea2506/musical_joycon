@@ -1,0 +1,12 @@
+[package]
+name = "musical_joycons"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+binascii = "0.1.4"
+joycon-rs = "0.6.3"
+rimd = "0.0.1"
+rand = "0.8.5"
