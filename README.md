@@ -14,12 +14,12 @@ git clone https://github.com/cpea2506/musical_joycon
 3. Run the command below
 
 ```bash
-cargo run
+cargo run -- <path to midi file>
 ```
 
 4. Enjoy!
 
-**Note**: Currently the music is hardcode with the [Overworld](./src/midi/overworld.mid) theme song from [Super Mario Bros](https://en.wikipedia.org/wiki/Super_Mario_Bros.)
+**Note**: Currently the work well music is [Overworld](./src/midi/overworld.mid) theme song from [Super Mario Bros](https://en.wikipedia.org/wiki/Super_Mario_Bros.)
 
 ## Inspired:
 
