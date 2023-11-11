@@ -1,56 +1,61 @@
-use std::{path::Path, time::Duration};
+use std::{fs, time::Duration};
 
 use crate::midi::Midi;
 use joycon_rs::{prelude::*, result::JoyConResult};
-use rimd::{Event, MetaCommand, Status, Track, TrackEvent, SMF};
+use midly::{MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 
 const MINUTE_PER_HOUR: u64 = 60;
 const MILI_PER_HOUR: u64 = MINUTE_PER_HOUR as u64 * 1000;
 const MICRO_PER_QUARTER: u64 = 60_000_000;
 
-pub struct Song(SMF);
+pub struct Song<'a>(Smf<'a>);
 
-impl Song {
+impl<'a> Song<'a> {
     pub fn new(file: String) -> Self {
-        let smf = SMF::from_file(Path::new(&file)).unwrap();
+        let data = fs::read(file).unwrap();
+        let smf = Smf::parse(&data).unwrap();
 
-        Self(smf)
+        Self(smf.make_static())
     }
 
     pub fn play(self, mut driver: SimpleJoyConDriver) -> JoyConResult<()> {
-        let SMF {
-            division, tracks, ..
-        } = self.0;
+        let Smf { tracks, header } = self.0;
+        let mut division: u64 = 0;
 
-        for Track { events, .. } in tracks {
+        if let Timing::Metrical(time) = header.timing {
+            division = time.as_int().into();
+        }
+
+        for track in &tracks {
             let mut tempo: u64 = 1;
 
-            for TrackEvent { vtime, event, .. } in events.iter() {
-                match event {
-                    Event::Meta(meta) => {
-                        if let MetaCommand::TempoSetting = meta.command {
-                            tempo = MICRO_PER_QUARTER / meta.data_as_u64(3);
+            for TrackEvent { delta, kind } in track {
+                match kind {
+                    TrackEventKind::Meta(meta) => {
+                        if let MetaMessage::Tempo(t) = meta {
+                            tempo = MICRO_PER_QUARTER / t.as_int() as u64;
                         }
                     }
-                    Event::Midi(message) => {
-                        let status = message.status();
-
-                        if status.is_note() {
-                            let time = vtime * MILI_PER_HOUR / (division as u64 * tempo);
+                    TrackEventKind::Midi { message, .. } => {
+                        if message.is_note() {
+                            let delta: u64 = delta.as_int().into();
+                            let time = delta * MILI_PER_HOUR / (division * tempo);
                             std::thread::sleep(Duration::from_millis(time));
                         }
 
-                        match status {
-                            Status::NoteOn => {
-                                let rumble = Rumble::new(message.data[1] as f32, 0.3);
+                        match message {
+                            MidiMessage::NoteOn { key, .. } => {
+                                let key: f32 = key.as_int().into();
+                                let rumble = Rumble::new(key, 0.3);
                                 driver.rumble((Some(rumble), Some(rumble)))?;
                             }
-                            Status::NoteOff => {
+                            MidiMessage::NoteOff { .. } => {
                                 driver.rumble((Some(Rumble::stop()), Some(Rumble::stop())))?;
                             }
                             _ => (),
                         }
                     }
+                    _ => (),
                 }
             }
         }
