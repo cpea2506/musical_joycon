@@ -56,7 +56,7 @@ pub struct Midi {
 }
 
 impl Midi {
-    pub fn new(path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(path: &str, channel: u8) -> Result<Self, Box<dyn Error>> {
         let data = fs::read(path)?;
         let smf = Smf::parse(&data)?;
 
@@ -71,22 +71,24 @@ impl Midi {
                 ticks += event.delta.as_int() as u64;
 
                 match event.kind {
-                    TrackEventKind::Midi { channel, message } => match message {
+                    TrackEventKind::Midi {
+                        message,
+                        channel: midi_channel,
+                    } if midi_channel == channel => match message {
                         MidiMessage::NoteOn { key, vel } if vel > ZERO_U7 => {
-                            active_notes
-                                .insert((channel.as_int(), key.as_int()), (ticks, vel.as_int()));
+                            active_notes.insert((channel, key), (ticks, vel.as_int()));
                         }
                         MidiMessage::NoteOff { key, .. }
                         | MidiMessage::NoteOn { key, vel: ZERO_U7 } => {
                             if let Some((start_tick, velocity)) =
-                                active_notes.remove(&(channel.as_int(), key.as_int()))
+                                active_notes.remove(&(channel, key))
                             {
                                 notes.push(NoteEvent {
                                     start_tick,
                                     end_tick: ticks,
                                     key: key.as_int(),
                                     velocity,
-                                    channel: Some(channel.as_int()),
+                                    channel: Some(channel),
                                 });
                             }
                         }

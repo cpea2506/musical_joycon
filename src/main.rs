@@ -14,10 +14,15 @@ use crate::midi::Midi;
 struct Args {
     /// Path to the midi file
     path: String,
+    /// Which channel to be played.
+    #[arg(long, default_value_t = 0)]
+    channel: u8,
 }
 
 #[tokio::main]
 async fn main() -> JoyConResult<()> {
+    let args = Args::parse();
+
     let manager = JoyConManager::get_instance();
     let devices = {
         let lock = manager.lock();
@@ -43,12 +48,10 @@ async fn main() -> JoyConResult<()> {
             }
         })
         .try_for_each::<_, Result<(), JoyConError>>(|d| {
-            let args = Args::parse();
-
             let mut driver = SimpleJoyConDriver::new(&d)?;
             driver.enable_feature(JoyConFeature::Vibration)?;
 
-            if let Ok(midi) = Midi::new(&args.path) {
+            if let Ok(midi) = Midi::new(&args.path, args.channel) {
                 let song = Song::new(driver, midi);
 
                 tokio::spawn(async move {
