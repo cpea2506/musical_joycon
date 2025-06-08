@@ -5,12 +5,12 @@ use joycon_rs::{prelude::*, result::JoyConResult};
 use midly::{MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 
 const MINUTE_PER_HOUR: u64 = 60;
-const MILI_PER_HOUR: u64 = MINUTE_PER_HOUR as u64 * 1000;
-const MICRO_PER_QUARTER: u64 = 60_000_000;
+const MILI_PER_HOUR: u64 = MINUTE_PER_HOUR * 1000;
+const MICRO_PER_QUARTER: u64 = MILI_PER_HOUR * 1000;
 
 pub struct Song<'a>(Smf<'a>);
 
-impl<'a> Song<'a> {
+impl Song<'_> {
     pub fn new(file: String) -> Self {
         let data = fs::read(file).unwrap();
         let smf = Smf::parse(&data).unwrap();
