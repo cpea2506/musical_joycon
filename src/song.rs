@@ -46,8 +46,9 @@ impl Song {
             let amplitude = (event.velocity as f32 / MAX_VELOCITY).powf(2.0);
 
             println!(
-                "Note {} (channel {}) -> freq: {:.2} Hz, amp: {:.2}, duration: {}μs",
+                "Note ({}, {:?}), (channel {}) -> freq: {:.2} Hz, amp: {:.2}, duration: {}μs",
                 Self::note_name(event.key),
+                event,
                 match event.channel {
                     Some(channel) => channel,
                     None => unreachable!(),
