@@ -4,8 +4,10 @@ mod song;
 use std::ops::Deref;
 
 use clap::Parser;
-use joycon_rs::prelude::*;
+use joycon_rs::{joycon::joycon_features::JoyConFeature, prelude::*};
 use song::Song;
+
+use crate::midi::Midi;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -14,36 +16,47 @@ struct Args {
     path: String,
 }
 
-fn main() -> JoyConResult<()> {
+#[tokio::main]
+async fn main() -> JoyConResult<()> {
     let manager = JoyConManager::get_instance();
-    let (managed_devices, new_devices) = {
+    let devices = {
         let lock = manager.lock();
+
         match lock {
-            Ok(manager) => (manager.managed_devices(), manager.new_devices()),
+            Ok(manager) => manager.new_devices(),
             Err(_) => unreachable!(),
         }
     };
 
-    managed_devices
+    devices
         .into_iter()
-        .chain(new_devices)
         .inspect(|d| {
             let lock = d.lock();
             let device = match lock {
                 Ok(device) => device,
                 Err(e) => e.into_inner(),
             };
-            let hid_device: JoyConResult<&HidDevice> = device.deref().try_into();
+            let hid_device: Result<&HidDevice, JoyConError> = device.deref().try_into();
+
             if let Ok(hid_device) = hid_device {
                 println!("{:?}", hid_device.get_product_string())
             }
         })
-        .try_for_each::<_, JoyConResult<()>>(|d| {
+        .try_for_each::<_, Result<(), JoyConError>>(|d| {
             let args = Args::parse();
-            let driver = SimpleJoyConDriver::new(&d)?;
-            let song = Song::new(args.path);
 
-            song.play(driver)?;
+            let mut driver = SimpleJoyConDriver::new(&d)?;
+            driver.enable_feature(JoyConFeature::Vibration)?;
+
+            if let Ok(midi) = Midi::new(&args.path) {
+                let song = Song::new(driver, midi);
+
+                tokio::spawn(async move {
+                    song.play().await?;
+
+                    Ok::<(), JoyConError>(())
+                });
+            }
 
             Ok(())
         })?;

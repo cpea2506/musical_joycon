@@ -1,63 +1,73 @@
-use std::{fs, time::Duration};
+use crate::midi::{MIDI_NOTE_TO_FREQUENCIES, Midi};
+use joycon_rs::prelude::*;
+use std::time::Duration;
+use tokio::time::{Instant, sleep_until};
 
-use crate::midi::Midi;
-use joycon_rs::{prelude::*, result::JoyConResult};
-use midly::{MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
+const NOTE_NAMES: [&str; 12] = [
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
 
-const MINUTE_PER_HOUR: u64 = 60;
-const MILI_PER_HOUR: u64 = MINUTE_PER_HOUR * 1000;
-const MICRO_PER_QUARTER: u64 = MILI_PER_HOUR * 1000;
+const MAX_VELOCITY: f32 = 127.0;
+const MICRO_PER_MINUTE: f64 = 60.0 * 1_000_000.0;
 
-pub struct Song<'a>(Smf<'a>);
+pub struct Song {
+    driver: SimpleJoyConDriver,
+    midi: Midi,
+}
 
-impl Song<'_> {
-    pub fn new(file: String) -> Self {
-        let data = fs::read(file).unwrap();
-        let smf = Smf::parse(&data).unwrap();
-
-        Self(smf.make_static())
+impl Song {
+    pub fn new(driver: SimpleJoyConDriver, midi: Midi) -> Self {
+        Self { driver, midi }
     }
 
-    pub fn play(self, mut driver: SimpleJoyConDriver) -> JoyConResult<()> {
-        let Smf { tracks, header } = self.0;
-        let mut division: u64 = 0;
+    fn note_name(note: u8) -> String {
+        let pitch_class = note % 12;
+        let octave = note / 12 - 1; // MIDI note 0 = C-1
 
-        if let Timing::Metrical(time) = header.timing {
-            division = time.as_int().into();
-        }
+        format!("{}{}", NOTE_NAMES[pitch_class as usize], octave)
+    }
 
-        for track in &tracks {
-            let mut tempo: u64 = 1;
+    fn ticks_to_micros(&self, ticks: u64) -> u64 {
+        let ubp = MICRO_PER_MINUTE / self.midi.bpm;
 
-            for TrackEvent { delta, kind } in track {
-                match kind {
-                    TrackEventKind::Meta(meta) => {
-                        if let MetaMessage::Tempo(t) = meta {
-                            tempo = MICRO_PER_QUARTER / t.as_int() as u64;
-                        }
-                    }
-                    TrackEventKind::Midi { message, .. } => {
-                        if message.is_note() {
-                            let delta: u64 = delta.as_int().into();
-                            let time = delta * MILI_PER_HOUR / (division * tempo);
-                            std::thread::sleep(Duration::from_millis(time));
-                        }
+        ((ticks as f64 * ubp) / self.midi.tpb as f64).round() as u64
+    }
 
-                        match message {
-                            MidiMessage::NoteOn { key, .. } => {
-                                let key: f32 = key.as_int().into();
-                                let rumble = Rumble::new(key, 0.3);
-                                driver.rumble((Some(rumble), Some(rumble)))?;
-                            }
-                            MidiMessage::NoteOff { .. } => {
-                                driver.rumble((Some(Rumble::stop()), Some(Rumble::stop())))?;
-                            }
-                            _ => (),
-                        }
-                    }
-                    _ => (),
-                }
-            }
+    /// Plays the song.
+    pub async fn play(mut self) -> JoyConResult<()> {
+        let start_time = Instant::now();
+
+        for event in &self.midi.note_events {
+            let start_offset = self.ticks_to_micros(event.start_tick);
+            let end_offset = self.ticks_to_micros(event.end_tick);
+            let duration_us = end_offset.saturating_sub(start_offset);
+
+            let frequency = MIDI_NOTE_TO_FREQUENCIES[event.key as usize];
+            let amplitude = event.velocity as f32 / MAX_VELOCITY;
+
+            println!(
+                "Note {} (channel {}) -> freq: {:.2} Hz, amp: {:.2}, duration: {}μs",
+                Self::note_name(event.key),
+                match event.channel {
+                    Some(channel) => channel,
+                    None => unreachable!(),
+                },
+                frequency,
+                amplitude,
+                duration_us
+            );
+
+            sleep_until(start_time + Duration::from_micros(start_offset)).await;
+
+            self.driver.rumble((
+                Some(Rumble::new(frequency, amplitude)),
+                Some(Rumble::new(frequency, amplitude)),
+            ))?;
+
+            sleep_until(start_time + Duration::from_micros(end_offset)).await;
+
+            self.driver
+                .rumble((Some(Rumble::stop()), Some(Rumble::stop())))?;
         }
 
         Ok(())
