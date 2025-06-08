@@ -43,7 +43,7 @@ impl Song {
             let duration_us = end_offset.saturating_sub(start_offset);
 
             let frequency = MIDI_NOTE_TO_FREQUENCIES[event.key as usize];
-            let amplitude = event.velocity as f32 / MAX_VELOCITY;
+            let amplitude = (event.velocity as f32 / MAX_VELOCITY).powf(2.0);
 
             println!(
                 "Note {} (channel {}) -> freq: {:.2} Hz, amp: {:.2}, duration: {}μs",
