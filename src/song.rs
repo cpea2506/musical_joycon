@@ -1,14 +1,9 @@
-use crate::midi::{MIDI_NOTE_TO_FREQUENCIES, Midi};
+use crate::{
+    MAX_VELOCITY, MICROSECONDS_PER_MINUTE, MIDI_NOTE_TO_FREQUENCIES, NOTE_NAMES, midi::Midi,
+};
 use joycon_rs::prelude::*;
 use std::time::Duration;
 use tokio::time::{Instant, sleep_until};
-
-const NOTE_NAMES: [&str; 12] = [
-    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-];
-
-const MAX_VELOCITY: f32 = 127.0;
-const MICRO_PER_MINUTE: f64 = 60.0 * 1_000_000.0;
 
 pub struct Song {
     driver: SimpleJoyConDriver,
@@ -28,7 +23,7 @@ impl Song {
     }
 
     fn ticks_to_micros(&self, ticks: u64) -> u64 {
-        let ubp = MICRO_PER_MINUTE / self.midi.bpm;
+        let ubp = MICROSECONDS_PER_MINUTE / self.midi.bpm;
 
         ((ticks as f64 * ubp) / self.midi.tpb as f64).round() as u64
     }

@@ -1,6 +1,8 @@
+mod constants;
 mod midi;
 mod song;
 
+pub use constants::*;
 use std::ops::Deref;
 
 use clap::Parser;
@@ -12,7 +14,7 @@ use crate::midi::Midi;
 #[derive(Parser, Debug)]
 #[command(version)]
 struct Args {
-    /// Path to the midi file
+    /// Path to the midi file.
     path: String,
     /// Which channel to be played.
     #[arg(long, default_value_t = 0)]
