@@ -61,7 +61,7 @@ impl Midi {
         let smf = Smf::parse(&data)?;
 
         let mut bpm = DEFAULT_BPM;
-        let mut notes = Vec::new();
+        let mut note_events = Vec::new();
         let mut active_notes = HashMap::new();
 
         for track in &smf.tracks {
@@ -83,7 +83,7 @@ impl Midi {
                             if let Some((start_tick, velocity)) =
                                 active_notes.remove(&(channel, key))
                             {
-                                notes.push(NoteEvent {
+                                note_events.push(NoteEvent {
                                     start_tick,
                                     end_tick: ticks,
                                     key: key.as_int(),
@@ -110,7 +110,7 @@ impl Midi {
         Ok(Self {
             tpb,
             bpm,
-            note_events: notes,
+            note_events,
         })
     }
 }
